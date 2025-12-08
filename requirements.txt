@@ -1,4 +1,7 @@
 torch>=1.6.0
-torchcontrib
-numpy
-soundfile
+torchcontrib~=0.0.2
+numpy~=2.2.6
+soundfile~=0.13.1
+pydub
+librosa~=0.11.0
+matplotlib~=3.10.7
