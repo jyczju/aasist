@@ -12,12 +12,14 @@ python spoof_judge.py --audio_path ./mydata/test.wav --model_path models/weights
 python spoof_judge.py --audio_path ./mydata/test.wav --model_path models/weights/AASIST.pth --config config/AASIST.conf --atk_amp 0.1 --atk_f 250.1
 """
 import argparse
+import functools
 import json
 import os
 import sys
 import warnings
 from importlib import import_module
 from pathlib import Path
+from typing import Tuple
 
 import numpy as np
 import soundfile as sf
@@ -79,22 +81,28 @@ def get_model(model_config, device):
     print("no. model params:{}".format(nb_params))
     return model
 
+# 使用functools.lru_cache装饰器来缓存音频加载结果
+@functools.lru_cache(maxsize=2)  # 缓存最近2个音频文件
+def load_audio_cached(audio_path: str) -> Tuple[np.ndarray, int]:
+    x, fs = sf.read(audio_path)
+
+    if fs != SAMPLE_RATE:
+        print("Sample rate is not 16kHz, resample to 16kHz")
+        # Resample
+        x = librosa.resample(x, orig_sr=fs, target_sr=SAMPLE_RATE)
+
+    # Convert to mono if stereo (double-check)
+    if len(x.shape) > 1:
+        x = x[:, 0]  # Take first channel
+    return x, fs
+
 
 def load_audio(audio_path, max_len=64600, atk_amp : float = None, atk_f :  float = None, show_plot=False):
     """Load audio file and pad/trim to max_len samples"""
     # Get file extension
     ext = os.path.splitext(audio_path)[1].lower()
     
-    x, fs = sf.read(audio_path)
-    
-    if fs != SAMPLE_RATE:
-        print("Sample rate is not 16kHz, resample to 16kHz")
-        # Resample
-        x = librosa.resample(x, orig_sr = fs, target_sr = SAMPLE_RATE)
-
-    # Convert to mono if stereo (double-check)
-    if len(x.shape) > 1:
-        x = x[:, 0]  # Take first channel
+    x, fs = load_audio_cached(audio_path)
     
     # Pad or trim to max_len
     x_pad = pad(x, max_len)

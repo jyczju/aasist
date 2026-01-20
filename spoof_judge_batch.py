@@ -1,16 +1,4 @@
-#!/usr/bin/env python3
-"""
-Script to judge if an audio file is spoofed or bonafide using AASIST model.
 
-AASIST
-Copyright (c) 2021-present NAVER Corp.
-MIT license
-
-
-python spoof_judge.py --audio_path ./mydata/test.wav --model_path models/weights/AASIST.pth --config config/AASIST.conf
-
-python spoof_judge.py --audio_path ./mydata/test.wav --model_path models/weights/AASIST.pth --config config/AASIST.conf --atk_amp 0.1 --atk_f 250.1
-"""
 import argparse
 import re
 import os
@@ -36,7 +24,7 @@ def main():
                         dest="audio_path",
                         type=str,
                         help="path to audio file to judge",
-                        default="mydata/VoxCeleb1/attacker_audio/")
+                        default="mydata/volunteer/attacker_audio/")
     parser.add_argument("--model_path",
                         dest="model_path",
                         type=str,
@@ -51,12 +39,12 @@ def main():
                         dest="device",
                         type=str,
                         help="device to use (cuda or cpu)",
-                        default=None)
+                        default="mps")
     parser.add_argument("--atk",
                         dest="atk",
                         type=bool,
                         help="attack or not",
-                        default=True)
+                        default=False)
 
 
     args = parser.parse_args()
@@ -101,7 +89,7 @@ def main():
             print(f"File: {file}, No number found")
 
         # 循环100次，记录平均Spoof probability
-        for i in tqdm(range(100)):
+        for i in tqdm(range(143)):
             with redirect_stdout(open(os.devnull, 'w')):
                 if args.atk:
                     is_spoof, confidence, spoof_prob, bonafide_prob = judge_spoof(
