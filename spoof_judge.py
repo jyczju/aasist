@@ -155,7 +155,7 @@ def judge_spoof(audio_path, model_path, config_path, device, atk_amp, atk_f):
             device = "cuda"
         else:
             device = "cpu"
-    print("Device: {}".format(device))
+    # print("Device: {}".format(device))
     if device == "cpu":
         print("Warning: Using CPU, this will be slow")
 
@@ -170,8 +170,8 @@ def judge_spoof(audio_path, model_path, config_path, device, atk_amp, atk_f):
     model.eval()
     with torch.no_grad():
         _, output = model(audio_tensor)
-        print("Output shape: {}".format(output.shape))
-        print("Output: {}".format(output))
+        # print("Output shape: {}".format(output.shape))
+        # print("Output: {}".format(output))
         # Get probabilities
         probabilities = torch.softmax(output, dim=1)
         spoof_prob = probabilities[0][0].item()  # Probability of spoof
