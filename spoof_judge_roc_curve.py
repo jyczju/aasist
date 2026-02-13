@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VoxCeleb数据集上的活体检测ROC曲线绘制脚本
+数据集上的活体检测ROC曲线绘制脚本
 
 该脚本用于绘制活体检测模型在VoxCeleb数据集上的ROC曲线，
 其中未攻击的音频定义为正样本，攻击后的音频定义为负样本。
@@ -25,31 +25,49 @@ import torch
 from spoof_judge import judge_spoof
 
 # 设置中文字体
-plt.rcParams['font.sans-serif'] = ['STHeiti']  # 使用 macOS 自带的中文字体
-plt.rcParams['axes.unicode_minus'] = False    # 用来正常显示负号
+plt.rcParams['font.sans-serif'] = ['STHeiti']  # 使用黑体作为默认字体
+plt.rcParams['axes.unicode_minus'] = False    # 解决负号 '-' 显示为方块的问题
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 SAMPLE_RATE = 16000
 
 
-class VoxCelebROCCalculator:
-    """VoxCeleb数据集ROC曲线计算器"""
+class DatasetROCCalculator:
+    """支持多数据集的ROC曲线计算器"""
     
-    def __init__(self, model_path: str, config_path: str, device: str = "cpu"):
+    def __init__(self, model_path: str, config_path: str, dataset: str = "voxceleb", device: str = "cpu"):
         self.model_path = model_path
         self.config_path = config_path
+        self.dataset = dataset.lower()
         self.device = device
         
-        # VoxCeleb攻击参数（根据spoof_judge_roc.py中的设置）
-        self.atk_amps = [0.5, 0.5, 0.3966, 0.1178, 0.44, 0.5, 0.5, 0.3378, 0.5, 0.1344,
-                        0.4641, 0.119, 0.481, 0.3819, 0.2124, 0.1794, 0.3569, 0.2895, 
-                        0.3477, 0.4853]
-        self.atk_fs = [1999.99, 10000, 7060.15, 6583.37, 9498.15, 3347.5, 3100.75, 
-                      4320.05, 5000, 1074.48, 1468.86, 6159.21, 2667.74, 3018.91, 
-                      618.74, 821.02, 3867.59, 1217.95, 614.54, 3976.73]
+        # 根据数据集选择攻击参数
+        self._init_attack_parameters()
+    
+    def _init_attack_parameters(self):
+        """初始化不同数据集的攻击参数"""
+        if self.dataset == "voxceleb":
+            # VoxCeleb攻击参数（根据spoof_judge_roc.py中的设置）
+            self.atk_amps = [0.5, 0.5, 0.3966, 0.1178, 0.44, 0.5, 0.5, 0.3378, 0.5, 0.1344,
+                            0.4641, 0.119, 0.481, 0.3819, 0.2124, 0.1794, 0.3569, 0.2895, 
+                            0.3477, 0.4853]
+            self.atk_fs = [1999.99, 10000, 7060.15, 6583.37, 9498.15, 3347.5, 3100.75, 
+                          4320.05, 5000, 1074.48, 1468.86, 6159.21, 2667.74, 3018.91, 
+                          618.74, 821.02, 3867.59, 1217.95, 614.54, 3976.73]
+            self.dataset_name = "VoxCeleb"
+        elif self.dataset == "aishell":
+            # AISHELL攻击参数（需要根据实际测试调整）
+            self.atk_amps = [0.3, 0.4, 0.25, 0.35, 0.45, 0.2, 0.38, 0.32, 0.42, 0.28,
+                            0.36, 0.44, 0.22, 0.34, 0.46, 0.26, 0.39, 0.31, 0.41, 0.29]
+            self.atk_fs = [1500.0, 8000.0, 5500.0, 7200.0, 3800.0, 2200.0, 6500.0,
+                          4200.0, 9500.0, 1800.0, 3200.0, 7800.0, 2600.0, 5800.0,
+                          4500.0, 1200.0, 6800.0, 3500.0, 8200.0, 2900.0]
+            self.dataset_name = "AISHELL"
+        else:
+            raise ValueError(f"不支持的数据集: {self.dataset}，支持的数据集: voxceleb, aishell")
         
-    def load_voxceleb_metadata(self, metadata_path: str) -> dict:
-        """加载VoxCeleb元数据"""
+    def load_metadata(self, metadata_path: str) -> dict:
+        """加载数据集元数据"""
         metadata = {}
         try:
             with open(metadata_path, 'r') as f:
@@ -81,7 +99,7 @@ class VoxCelebROCCalculator:
                 - y_scores_attacked: 攻击后音频的bonafide概率分数
         """
         # 加载元数据
-        metadata = self.load_voxceleb_metadata(metadata_path) if metadata_path else {}
+        metadata = self.load_metadata(metadata_path) if metadata_path else {}
         
         y_true = []          # 真实标签
         y_scores_clean = []  # 未攻击的bonafide概率
@@ -142,7 +160,7 @@ class VoxCelebROCCalculator:
             
         return y_true, y_scores_clean, y_scores_attacked
     
-    def plot_roc_curve(self, y_true: List[int], y_scores_clean: List[float], 
+    def plot_roc_curve(self, y_true: List, y_scores_clean: List,
                       y_scores_attacked: List[float], save_path: str = None):
         """
         绘制ROC曲线
@@ -163,31 +181,34 @@ class VoxCelebROCCalculator:
         roc_auc = auc(fpr, tpr)
         
         # 创建图形
-        plt.figure(figsize=(10, 8))
+        plt.figure(figsize=(4.5, 4))
+
+        # 设置刻度坐标字号为12
+        plt.tick_params(axis='both', which='major', labelsize=13)
         
         # 绘制ROC曲线
         plt.plot(fpr, tpr, color='darkorange', lw=2.5, marker='o', markersize=3,
-                label=f'ROC curve (AUC = {roc_auc:.4f})', markevery=max(1, len(fpr)//20))
+                label=f'ROC曲线(AUC = {roc_auc:.3f})', markevery=max(1, len(fpr)//20))
         
         # 绘制对角线
-        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', label='Random classifier (AUC = 0.5)')
+        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--', label='随机分类器(AUC = 0.5)')
         
         # 设置图形属性
         plt.xlim([-0.02, 1.02])
         plt.ylim([-0.02, 1.02])
-        plt.xlabel('False Positive Rate (攻击被误判为正常的比例)', fontsize=12)
-        plt.ylabel('True Positive Rate (正常样本被正确识别的比例)', fontsize=12)
-        plt.title('活体检测模型在VoxCeleb数据集上的ROC曲线\n(未攻击=正样本, 攻击=负样本)', fontsize=14, fontweight='bold')
-        plt.legend(loc="lower right", fontsize=11)
+        plt.xlabel('误报率(攻击被误判为正常的比例)', fontsize=13)
+        plt.ylabel('召回率(正常样本被正确识别的比例)', fontsize=13)
+        # plt.title(f'活体检测模型在{self.dataset_name}数据集上的ROC曲线\n(未攻击=正样本, 攻击=负样本)', fontsize=14, fontweight='bold')
+        plt.legend(loc="lower right", fontsize=13)
         plt.grid(True, alpha=0.3)
         
         # 添加AUC文本框
-        plt.text(0.6, 0.2, f'AUC = {roc_auc:.4f}\n' 
-                          f'测试样本数: {len(y_true)}\n'
-                          f'正样本(未攻击): {len(y_scores_clean)}\n'
-                          f'负样本(攻击): {len(y_scores_attacked)}',
-                bbox=dict(boxstyle="round,pad=0.5", facecolor='lightblue', alpha=0.8),
-                fontsize=10)
+        # plt.text(0.05, 0.75, f'AUC = {roc_auc:.4f}\n'
+        #                   f'测试样本数: {len(y_true)}\n'
+        #                   f'正样本(未攻击): {len(y_scores_clean)}\n'
+        #                   f'负样本(攻击): {len(y_scores_attacked)}',
+        #         bbox=dict(boxstyle="round,pad=0.5", facecolor='lightblue', alpha=0.8),
+        #         fontsize=10)
         
         # 移除重复的文本信息（已在上面添加）
         
@@ -202,7 +223,7 @@ class VoxCelebROCCalculator:
         
         return roc_auc, fpr, tpr, thresholds
     
-    def print_statistics(self, y_true: List[int], y_scores_clean: List[float], 
+    def print_statistics(self, y_true: List, y_scores_clean: List,
                         y_scores_attacked: List[float]):
         """打印统计信息"""
         print("\n=== ROC分析统计信息 ===")
@@ -218,13 +239,19 @@ class VoxCelebROCCalculator:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="绘制VoxCeleb数据集上的活体检测ROC曲线")
+    parser = argparse.ArgumentParser(description="绘制多数据集活体检测ROC曲线")
+    parser.add_argument("--dataset",
+                        dest="dataset",
+                        type=str,
+                        choices=["voxceleb", "aishell"],
+                        help="数据集类型",
+                        default="voxceleb")
     parser.add_argument("--audio_dir",
                         dest="audio_dir",
                         type=str,
                         required=False,
-                        help="VoxCeleb音频文件目录",
-                        default="/Users/jiangyancheng/Library/CloudStorage/OneDrive-个人/Ghost-SV/evaluation_audio/merged/VoxCeleb1/target_audio/")
+                        help="音频文件目录",
+                        default=None)
     parser.add_argument("--model_path",
                         dest="model_path",
                         type=str,
@@ -254,9 +281,16 @@ def main():
                         dest="save_path",
                         type=str,
                         help="ROC曲线保存路径",
-                        default="./figure/voxceleb_roc_curve.png")
+                        default="./figure/roc_curve.pdf")
     
     args = parser.parse_args()
+    
+    # 根据数据集设置默认音频目录
+    if args.audio_dir is None:
+        if args.dataset == "voxceleb":
+            args.audio_dir = "/Users/jiangyancheng/Library/CloudStorage/OneDrive-个人/Ghost-SV/evaluation_audio/merged/VoxCeleb1/target_audio/"
+        elif args.dataset == "aishell":
+            args.audio_dir = "/Users/jiangyancheng/Library/CloudStorage/OneDrive-个人/Ghost-SV/evaluation_audio/merged/aishell/target_audio/"
     
     # 检查必要文件是否存在
     if not os.path.exists(args.audio_dir):
@@ -277,15 +311,15 @@ def main():
         if output_dir and not os.path.exists(output_dir):
             os.makedirs(output_dir)
     
-    print("开始计算VoxCeleb数据集上的ROC曲线...")
+    print(f"开始计算{args.dataset.upper()}数据集上的ROC曲线...")
+    print(f"数据集: {args.dataset}")
     print(f"音频目录: {args.audio_dir}")
     print(f"模型路径: {args.model_path}")
     print(f"设备: {args.device}")
     print(f"每个文件测试次数: {args.test_times}")
-    print(f"总测试点数: {len(os.listdir(args.audio_dir)) * args.test_times * 2}")
     
     # 初始化计算器
-    calculator = VoxCelebROCCalculator(args.model_path, args.config, args.device)
+    calculator = DatasetROCCalculator(args.model_path, args.config, args.dataset, args.device)
     
     # 计算ROC点
     y_true, y_scores_clean, y_scores_attacked = calculator.calculate_roc_points(
